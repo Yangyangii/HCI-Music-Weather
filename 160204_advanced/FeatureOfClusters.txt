@@ -1,0 +1,26 @@
+﻿* Feature of Clusters
+
+-Cluster$1 : Cold
+SPECAIL = [S?, -B, B, BB, 0]
+
+-Cluster$2 : Hot, Rain
+SPECAIL = [BS, -B, B, BB, -B]
+
+-Cluster$3 : Hot, Rain, Thunderstorm
+SPECAIL = [S?, -B, BS, BB, -B]
+
+-Cluster$4 : Warm&Cool
+SPECAIL = [-S, 0, B, B, 0]
+
+-Cluster$5 : Warm&Cool, Fog
+SPECAIL = [S, -B, B, B, 0]
+
+-Cluster$6 : Warm&Cool, Rain
+SPECAIL = [0, -B, B, B, 0]
+비와 관련되면 마지막 항: -B
+
+-Cluster$7 : Cold, Snow
+SPECAIL = [M, -S, -S, M, M]
+
+-Cluster$8 : Hot
+SPECAIL = [B, -B, 0, M, -M]

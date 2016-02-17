@@ -1,0 +1,324 @@
+macro
+
+###########################################################################
+#
+#  Name:        ROCBLR.MAC 
+#  Version:     Release 15 and 16
+#  Written by:  Mindy Tomlinson
+#
+#  This macro performs three functions as a follow up to a binary logistic 
+#  (BLR) regression analysis:
+#
+#  1. Generates a classification table 
+#  2. Generates an ROC (Receiver Operating Characteristic) curve and 
+#     calculates the area under the curve
+#  3. Given the event probabilities, stores an event probability for each
+#     row, not just the first instance of a unique set of predictor values
+#
+#  Before running this macro, 
+#  1. Ensure that the response data is in response/frequency format, which
+#     is the default format.
+#  2. Perform the binary logistic regression analysis AND store the event 
+#     probabilities in the worksheet.
+#
+#  To store the event probabilities from a binary logistic regression 
+#  analysis, choose Stat > Regression > Binary Logistic Regression. Enter 
+#  the response and model, and set any necessary options.  Click Storage 
+#  and select "Event probability".  Click OK and OK again.  The results of 
+#  the analysis will be displayed in the Session window and the event 
+#  probabilities will be stored in the first empty column after the last 
+#  column in use in your worksheet. This column will be  named "EPRO1" 
+#  or "EPRO2", etc., depending on how many times you have performed binary 
+#  logistic regression on the same set of data.
+#
+#  Suppose your binary response variable is in column C3, and you have two 
+#  predictors in columns C1 and C2.  The event probabilities are stored in 
+#  C5.  To run this macro, choose Edit > Command Line Editor and submit 
+#  the following commands:
+#
+#  %ROCBLR C3;
+#   MODEL C1 C2;
+#   EPRO C5.
+#
+#  The Session window output provides a classification table and an ROC 
+#  curve.  See the associated documentation for details.
+#
+#  This macro also includes four optional subcommands:
+#
+#  FREQ:     Use the FREQ subcommand if you specified a frequency column 
+#            when you ran the binary logistic regression. For example, if 
+#            you specifed C4 as the frequency column, you must submit the 
+#            FREQ subcommand as,
+#
+#            FREQ C4;
+#
+#  REFEVENT: Use the REFEVENT subcommand if you specified a reference 
+#            event when running binary logistic regression. For example, 
+#            if your binary response variable consists of two values, 
+#            "Pass" and "Fail" and you set the reference event to be 
+#            "Pass", you must submit the REFEVENT subcommand as,
+#   
+#            REFEVENT "Pass";
+#         
+#  FITSTORE: Use the FITSTORE subcommand if you wish to store the "fitted 
+#            values", which are used to generate the classification table. 
+#            In binary logistic regression, an observation's fitted value 
+#            is equal to the reference event if that observation's event 
+#            probability is greater than or equal to 0.5.  For example, if 
+#            column C7 is empty and you wish to store the fitted values
+#            in C7, you must submit the FITSTORE subcommand as,
+#
+#            FITSTORE C7;
+#
+#  ROCSTORE: Use the ROCSTORE subcommand if you wish to store the data 
+#            used to generate the ROC curve. This subcommand requires 
+#            three empty columns as its arguments: one column to store the 
+#            values of p, and two columns to store the sensitivity
+#            and specificity values for each value of p. (Note that the 
+#            ROC curve plots sensitivity versus 1 - specificity). For 
+#            example, if you wish to store the ROC data in columns C8-C10,
+#            you must submit the ROCSTORE subcommand as, 
+# 
+#            ROCSTORE C8-C10;
+#                           
+###########################################################################
+#  
+#  Neither Minitab, Inc. nor the author(s) of this MACRO makes any claim 
+#  of or offers any Warranty whatsoever with regard to the accuracy of 
+#  this MACRO or its suitability for use.  Minitab, Inc. and the author(s)
+#  of this MACRO each hereby disclaims any Warranty and/or liability with 
+#  respect thereto. 
+#
+###########################################################################
+
+rocblr y; 
+model x.1-x.k;
+epro evpro;
+freq frq;           #OPTIONAL
+refevent event;     #OPTIONAL
+fitstore fits;      #OPTIONAL
+rocstore p senstvty specfcty. #OPTIONAL
+
+mcolumns y x.1-x.k evpro fits temp p senstvty specfcty minuspec
+mcolumns r frq
+mconstant k event altevent totevent totalt i endp npts inc yname laby labx 
+mconstant corr1 corr2 totcorr totinco numobs area arlabel ttlname ftnt r14a r14b r15a r15b
+
+mreset
+noecho
+brief 0
+notitle
+
+if model = 0
+  brief 1
+  note
+  note
+  note  **Error**  You must use the MODEL subcommand 
+  note
+  exit
+endif
+
+if epro = 0
+  brief 1
+  note
+  note
+  note  **Error**  You must use the EPRO subcommand 
+  note
+  exit
+endif
+
+#*****************************************
+# Get event probabilities for every row
+#*****************************************
+
+call eprorows y x.1 - x.k evpro
+
+#*****************************************
+# Get ref event if none is provided, and 
+#   get alternative event
+#*****************************************
+
+if refevent
+  let event = event
+else
+  sort y temp;
+    by y;
+    descending y.
+  copy temp event;
+    include;
+      rows 1.
+endif
+  sort y temp;
+    by y.
+  copy temp altevent;
+    include;
+      rows 1.
+
+#*****************************************
+# Calculate "fitted" values for p0 = 0.5
+#*****************************************
+
+let fits = if( evpro >= 0.5, event, altevent)
+name fits "Classification"
+
+#*****************************************
+# Generate classification table
+#*****************************************
+
+if freq
+  let frq = frq
+else
+  let frq = 1
+endif
+ 
+
+let totevent = sum( frq * ( y = event ))
+let totalt = sum( frq * ( y = altevent ))
+
+let corr1 = sum( frq * ( y = event AND evpro >= 0.5 ))
+let corr2 = sum( frq * ( y = altevent AND evpro < 0.5 ))
+
+let totcorr = corr1 + corr2
+let numobs = totevent + totalt
+let totinco = numobs - totcorr
+
+kkname yname y
+
+let r[1] = rept("-",76)
+let r[2] = concatenate(yname," is classified as '",event,"' when the event probability")
+let r[3] = "for an observation is greater than or equal to 0.5."
+let r[4] = rept("-",76)
+
+let r[6] = concatenate("Rows:     Observed ",yname)
+let r[7] = "Columns:  Number of observations that are correctly or incorrectly classified"
+let r[8] = rept("-",76)
+
+let r[10] = concatenate(rept(" ",10),"Classification")
+let r[11] = concatenate(rept(" ",8),rept("-",31))
+let r[12] = concatenate(rept(" ",10),"Correct  Incorrect  Total")
+let r[13] = concatenate(rept(" ",8),rept("-",31))
+
+let r14a  = concatenate(pad(text(event),10),rept(" ", 7 - len(text(corr1))), text(corr1))
+let r14b  = concatenate(rept(" ", 11 - len(text(totevent - corr1))), text(totevent - corr1),&
+            rept(" ", 7 - len(text(totevent))), text(totevent))
+let r[14] = concatenate(r14a, r14b)
+
+let r15a  = concatenate(pad(text(altevent),10),rept(" ", 7 - len(text(corr2))), text(corr2))
+let r15b  = concatenate(rept(" ", 11 - len(text(totalt - corr2))), text(totalt - corr2),&
+            rept(" ", 7 - len(text(totalt))), text(totalt))
+let r[15] = concatenate(r15a, r15b)
+
+let r[16] = concatenate(rept(" ",8),rept("-",31))
+
+let r[17] = concatenate(pad("Total",10),&
+rept(" ", 7 - len(text(totcorr))), text(totcorr),&
+rept(" ", 11 - len(text(totinco))), text(totinco),&
+rept(" ", 7 - len(text(numobs))), text(numobs))
+
+let r[19] = rept("-",76)
+let r[20] = "ROC Curve:"
+let r[22] = concatenate("Sensitivity = P( Classified ", yname, " = ", event, " | Observed ", yname, " = ",event, " )")
+let r[23] = concatenate("Specificity = P( Classified ", yname, " = ", altevent, " | Observed ", yname, " = ",altevent, " )")
+
+brief 2
+write r
+brief 0
+
+#*****************************************
+# Calculate plot points for ROC curve
+#*****************************************
+
+let npts = 101
+let inc = 1 / (npts - 1)
+
+set p
+ (0:1/inc)
+end
+
+n p endp
+
+erase senstvty specfcty 
+
+do i = 1:endp
+
+  let senstvty[i] = sum( frq * (y = event AND evpro >= p[i] )) / totevent
+  let specfcty[i] = sum( frq * (y = altevent AND evpro < p[i] )) / totalt
+
+enddo
+
+let minuspec = 1 - specfcty
+
+sort p senstvty specfcty minuspec p senstvty specfcty minuspec;
+  by minuspec senstvty.
+
+name p "p" senstvty "Sensitivity" specfcty "Specificity"
+
+
+#*****************************************
+# Calculate area under ROC curve
+#*****************************************
+
+let area = -sum( diff(senstvty) * diff(minuspec) * 0.5 - diff(minuspec) * senstvty )
+
+#*****************************************
+# Generate ROC plot
+#*****************************************
+
+let arlabel = concatenate("Area under the curve is approximately ",text(round(area,2)))
+let ttlname = concatenate("ROC Curve for ",yname)
+let ftnt = "Note: Changing your data will not update this graph automatically"
+
+plot senstvty * minuspec;
+  connect;
+    order 0;
+  scale 1;
+    model 1;
+      min -0.01;
+      max 1;
+    endmodel;
+  scale 2;
+    model 1;
+      min 0;
+    endmodel;
+  axlabel 1 "1 - Specificity (false positive rate)";
+    adisplay 1;
+  axlabel 2 "Sensitivity (true positive rate)";
+    adisplay 1;
+  nojitter;
+  title ttlname;
+  subtitle arlabel;
+    center;
+  wtitle ttlname;
+  footnote ftnt;
+    tsize 0.75;
+  data 0.2 0.8 0.2 0.8.
+brief 2 
+title
+endmacro
+
+####################################################
+## Macro that gets event probabilities for every row
+####################################################
+
+macro
+
+eprorows y x.1-x.k evpro
+
+mcolumns y x.1-x.k evpro 
+mcolumns ys xs.1-xs.k evpros index indexs
+mconstant k numrows
+
+n y numrows
+set index
+  (1:numrows)
+end
+
+sort (y x.1-x.k evpro index) (ys xs.1-xs.k evpros indexs);
+  by x.1-x.k evpro.
+
+while sum(evpros = '*') > 0
+  let evpros = if(evpros = '*', lag(evpros), evpros)
+endwhile
+
+convert indexs evpros index evpro
+endmacro
